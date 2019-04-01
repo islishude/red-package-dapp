@@ -109,6 +109,7 @@ contract RedPacket is Friendship {
        uint256 remainSize;
        uint256 timestamp;
        uint256 expireDays;
+       address payable[] grabbed;
     }
 
     mapping(string => Record) records;
@@ -119,7 +120,7 @@ contract RedPacket is Friendship {
                     address token,
                     uint256 value,
                     uint256 size,
-                    uint256 expireDays) public OnlyOwner {
+                    uint256 expireDays) public payable OnlyOwner {
         require(value > 0 && size > 0, "giving value and package size should be greater than 0");
         uint256 amount = value * size;
         if(token == address(0x0)){
@@ -127,7 +128,9 @@ contract RedPacket is Friendship {
         } else {
             require(ERC20Interface(token).balanceOf(address(this)) >= amount, "not sufficient funds");
         }
-        records[passwd] =  Record(onlyFriend, equalDivision, token, value, amount, size, size, block.timestamp, expireDays);
+        
+        address payable[] memory grabbed; 
+        records[passwd] =  Record(onlyFriend, equalDivision, token, value, amount, size, size, block.timestamp, expireDays, grabbed);
     }
     
     function Revoke(string memory passwd) public OnlyOwner {
@@ -138,8 +141,13 @@ contract RedPacket is Friendship {
         require(!blacklist[msg.sender]);
         Record storage r = records[passwd];
         require(r.remainAmount != 0 && r.remainSize != 0 && r.timestamp + r.expireDays <= block.timestamp, "invalid red package password or expired");
+        
         if(r.onlyFriend) {
             require(friendship[msg.sender], "only friend can grab this red package");
+        }
+        
+        for(uint256 i = 0; i < r.grabbed.length; ++i){
+            require(msg.sender != r.grabbed[i], "only grabbed once");
         }
         
         uint256 value = 0;
@@ -169,6 +177,12 @@ contract RedPacket is Friendship {
         
         r.remainAmount -= value;
         r.remainSize--;
+        
+        if(r.remainSize == 0){
+            delete records[passwd];
+        }
+        
+        r.grabbed.push(msg.sender);
     }
   
     function destructor() public OnlyOwner {
