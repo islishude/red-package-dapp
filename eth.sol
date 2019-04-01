@@ -94,14 +94,21 @@ contract Tokens {
     
 }
 
-contract Words is Friendship {
-    struct Record {
+contract RedPacket is Friendship {
+    constructor() public payable {}
+    
+    function() external payable {}
+    
+      struct Record {
        bool equalDivision;
        bool onlyFriend;
        address token; // 0x0 for ETH
-       uint256 value;
+       uint256 value; // value for everyone NOT all amount
+       uint256 remainAmount;
        uint256 size;
+       uint256 remainSize;
        uint256 timestamp;
+       uint256 expireDays;
     }
 
     mapping(string => Record) records;
@@ -111,17 +118,16 @@ contract Words is Friendship {
                     bool onlyFriend,
                     address token,
                     uint256 value,
-                    uint256 size) public OnlyOwner {
-        require(value > 0 && size > 0 && value >= size, "giving value and package size should be greater than 0");
-        if(equalDivision){
-            require(value % size == 0);
-        }
+                    uint256 size,
+                    uint256 expireDays) public OnlyOwner {
+        require(value > 0 && size > 0, "giving value and package size should be greater than 0");
+        uint256 amount = value * size;
         if(token == address(0x0)){
-            require(address(this).balance >= value, "not sufficient funds");
+            require(address(this).balance >= amount, "not sufficient funds");
         } else {
-            require(ERC20Interface(token).balanceOf(address(this))>=value, "not sufficient funds");
+            require(ERC20Interface(token).balanceOf(address(this)) >= amount, "not sufficient funds");
         }
-        records[passwd] =  Record(onlyFriend, equalDivision, token, value, size, block.timestamp);
+        records[passwd] =  Record(onlyFriend, equalDivision, token, value, amount, size, size, block.timestamp, expireDays);
     }
     
     function Revoke(string memory passwd) public OnlyOwner {
@@ -131,27 +137,40 @@ contract Words is Friendship {
     function Grabbing(string memory passwd) public {
         require(!blacklist[msg.sender]);
         Record storage r = records[passwd];
-        require(r.value != 0 && r.timestamp + 1 days <= block.timestamp, "invalid red package password or expired");
+        require(r.remainAmount != 0 && r.remainSize != 0 && r.timestamp + r.expireDays <= block.timestamp, "invalid red package password or expired");
         if(r.onlyFriend) {
             require(friendship[msg.sender], "only friend can grab this red package");
         }
         
-        // uint256 value = r.equalDivision ? r.value / r.size : 0;
+        uint256 value = 0;
         
-        // TODO
-        if(r.token == address(0x0)){
-            msg.sender.transfer(0);
+        if(r.equalDivision) {
+            value = r.value;
+        } else  if (r.remainSize == 1){
+            value = r.remainAmount;
         } else {
-            ERC20Interface(r.token).transfer(msg.sender, 0);
+            bytes memory entropy = abi.encode(blockhash(block.number-1), msg.sender, r.remainAmount, r.remainSize, now);
+            bytes32 random = keccak256(entropy);
+            // TODO: set max value for grabbing
+            uint256 tmp = uint256(random) % r.remainAmount;
+            if(tmp == 0) {
+                value = 1;
+            } else if (tmp > r.value){
+                value = r.value;
+            } else {
+                value = tmp;
+            }
         }
+
+        if(r.token == address(0x0)){
+            msg.sender.transfer(value);
+        } else {
+            ERC20Interface(r.token).transfer(msg.sender, value);
+        }
+        
+        r.remainAmount -= value;
+        r.remainSize--;
     }
-}
-
-contract RedPacket is Words {
-    constructor() public payable {}
-    
-    function() external payable {}
-
   
     function destructor() public OnlyOwner {
         selfdestruct(owner);
