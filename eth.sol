@@ -143,7 +143,6 @@ contract RedPacket is Friendship {
         }
         
         uint256 value = 0;
-        
         if(r.equalDivision) {
             value = r.value;
         } else  if (r.remainSize == 1){
@@ -151,12 +150,12 @@ contract RedPacket is Friendship {
         } else {
             bytes memory entropy = abi.encode(blockhash(block.number-1), msg.sender, r.remainAmount, r.remainSize, now);
             bytes32 random = keccak256(entropy);
-            // TODO: set max value for grabbing
             uint256 tmp = uint256(random) % r.remainAmount;
+            uint256 max = uint256(r.remainAmount) / uint256(r.remainSize);
             if(tmp == 0) {
                 value = 1;
-            } else if (tmp > r.value){
-                value = r.value;
+            } else if (tmp > max){
+                value = max;
             } else {
                 value = tmp;
             }
