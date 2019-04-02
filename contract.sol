@@ -1,25 +1,25 @@
 pragma solidity ^0.5.0;
 
 contract Friendship {
-    mapping(address => address payable[]) internal friends;
+    mapping(address => address[]) internal friends;
     mapping(address => mapping(address => bool)) public friendship;
 
     constructor() public {}
 
-    function MyFriends() public view returns (address payable[] memory) {
+    function MyFriends() public view returns (address[] memory) {
         return friends[msg.sender];
     }
 
-    function AddFriend(address payable _friend) public {
+    function AddFriend(address _friend) public {
         if (friendship[msg.sender][_friend]) {
             return;
         }
         friends[msg.sender].push(_friend);
     }
 
-    function AddFriendList(address payable[] memory list) public {
+    function AddFriendList(address[] memory list) public {
         for (uint i = 0; i < list.length; ++i) {
-            address payable cur = list[i];
+            address cur = list[i];
             if (friendship[msg.sender][cur]) {
                 continue;
             }
@@ -28,7 +28,7 @@ contract Friendship {
         }
     }
 
-    function DelFriend(address payable _friend) public {
+    function DelFriend(address _friend) public {
         if (!friendship[msg.sender][_friend]) {
             return;
         }
@@ -98,22 +98,6 @@ contract TokenReciever {
 
     function balanceOf(address token) public view returns (uint256) {
         return ERC20Interface(token).balanceOf(address(this));
-    }
-
-    function allowance(address token, address spender)
-        public
-        view
-        returns (uint256)
-    {
-        return ERC20Interface(token).allowance(address(this), spender);
-    }
-
-    function approve(address token, address spender, uint256 value)
-        public
-        IsLocked
-        returns (bool)
-    {
-        return ERC20Interface(token).approve(spender, value);
     }
 
     function SetUnlock(bool _locked) public {
@@ -192,6 +176,7 @@ contract RedPackage is Friendship, Token {
         return r.owner != address(0x0);
     }
 
+    // Giving gives out ETH.
     function Giving(
         string memory word,
         bool equalDivision,
@@ -326,67 +311,35 @@ contract RedPackage is Friendship, Token {
     }
 }
 
-contract TronToken {
-    string public name = "Tronix"; //  token name
-    string public symbol = "TRX"; //  token symbol
-    uint256 public decimals = 6; //  token digit
-
-    uint256 public nonce;
+// Simple ERC20 token for testing
+contract AdeToken {
+    string public name = "AdeToken";
+    string public symbol = "ADT";
+    uint8 public decimals = 18;
+    uint256 public constant totalSupply = 10 ** 18 * 10 ** 8;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
-    uint256 public totalSupply = 0;
-    bool public stopped = false;
-
-    uint256 public constant valueFounder = 100000000000000000;
-    address payable public owner = address(0x0);
-
-    modifier isOwner {
-        assert(owner == msg.sender);
-        _;
-    }
-
-    modifier isRunning {
-        assert(!stopped);
-        _;
-    }
-
-    modifier validAddress {
-        assert(address(0x0) != msg.sender);
-        _;
-    }
-
-    function test() public returns (address) {
-        nonce++;
-        return msg.sender;
-    }
-
     constructor() public {
-        owner = msg.sender;
-        totalSupply = valueFounder;
-        balanceOf[owner] = valueFounder;
-        emit Transfer(address(0x0), owner, valueFounder);
+        balanceOf[msg.sender] = totalSupply;
+        emit Transfer(address(0x0), msg.sender, totalSupply);
     }
 
     function transfer(address _to, uint256 _value)
         public
-        isRunning
-        validAddress
         returns (bool success)
     {
-        emit Transfer(msg.sender, _to, _value);
         require(balanceOf[msg.sender] >= _value);
         require(balanceOf[_to] + _value >= balanceOf[_to]);
         balanceOf[msg.sender] -= _value;
         balanceOf[_to] += _value;
+        emit Transfer(msg.sender, _to, _value);
         return true;
     }
 
     function transferFrom(address _from, address _to, uint256 _value)
         public
-        isRunning
-        validAddress
         returns (bool success)
     {
         require(balanceOf[_from] >= _value);
@@ -401,33 +354,12 @@ contract TronToken {
 
     function approve(address _spender, uint256 _value)
         public
-        isRunning
-        validAddress
         returns (bool success)
     {
         require(_value == 0 || allowance[msg.sender][_spender] == 0);
         allowance[msg.sender][_spender] = _value;
         emit Approval(msg.sender, _spender, _value);
         return true;
-    }
-
-    function stop() public isOwner {
-        stopped = true;
-    }
-
-    function start() public isOwner {
-        stopped = false;
-    }
-
-    function setName(string memory _name) public isOwner {
-        name = _name;
-    }
-
-    function burn(uint256 _value) public {
-        require(balanceOf[msg.sender] >= _value);
-        balanceOf[msg.sender] -= _value;
-        balanceOf[address(0x0)] += _value;
-        emit Transfer(msg.sender, address(0x0), _value);
     }
 
     event Transfer(address indexed _from, address indexed _to, uint256 _value);
