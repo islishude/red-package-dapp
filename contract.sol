@@ -72,15 +72,27 @@ contract ERC20Interface {
 
 // DON'T implements ERC20Interface!
 contract TokenReciever {
-    constructor() public {}
+    bool public locked = false;
+    address owner;
 
-    function transfer(address token, address to, uint value) public {
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    modifier IsLocked {
+        require(!locked);
+        _;
+    }
+
+    function transfer(address token, address to, uint value) public IsLocked {
         ERC20Interface(token).transfer(to, value);
     }
 
     function transferFrom(address token, address from, address to, uint tokens)
         public
+        IsLocked
     {
+        require(!locked);
         ERC20Interface(token).transferFrom(from, to, tokens);
     }
 
@@ -98,15 +110,20 @@ contract TokenReciever {
 
     function approve(address token, address spender, uint256 value)
         public
+        IsLocked
         returns (bool)
     {
         return ERC20Interface(token).approve(spender, value);
     }
+
+    function SetUnlock(bool _locked) public {
+        require(msg.sender == owner);
+        locked = _locked;
+    }
 }
 
 contract Token {
-    mapping(address => TokenReciever) tokens;
-    constructor() public {}
+    mapping(address => TokenReciever) public tokens;
 
     function NewTokenReceiver() public {
         require(
@@ -119,6 +136,14 @@ contract Token {
 
     function WithdrawToken(address token, address _to, uint256 value) public {
         tokens[msg.sender].transfer(token, _to, value);
+    }
+
+    function Balance(address token) public view returns (uint256) {
+        return tokens[msg.sender].balanceOf(token);
+    }
+
+    function SetUnlock(address user, bool locked) internal {
+        tokens[user].SetUnlock(locked);
     }
 }
 
@@ -241,6 +266,7 @@ contract RedPackage is Friendship, Token {
             block.timestamp + expireDays * 1 days,
             grabbed
         );
+        SetUnlock(msg.sender, true);
     }
 
     function Grabbing(string memory word) public {
@@ -269,20 +295,20 @@ contract RedPackage is Friendship, Token {
                 r.remainSize,
                 block.timestamp
             );
-            bytes32 random = keccak256(entropy);
-            uint256 tmp = uint256(random) % r.remainAmount;
+            uint256 val = uint256(keccak256(entropy)) % r.remainAmount;
             uint256 max = uint256(r.remainAmount) / uint256(r.remainSize);
-            if (tmp == 0) {
+            if (val == 0) {
                 value = 1;
-            } else if (tmp > max) {
+            } else if (val > max) {
                 value = max;
             } else {
-                value = tmp;
+                value = val;
             }
         }
 
+        // owner of giving ETH can grab but owner of giving ERC20 token can't grab
         if (r.token == address(0x0)) {
-            require(msg.sender.send(value), "transfer failed");
+            msg.sender.transfer(value);
         } else {
             tokens[r.owner].transfer(r.token, msg.sender, value);
         }
@@ -291,8 +317,123 @@ contract RedPackage is Friendship, Token {
         r.remainSize--;
         if (r.remainSize == 0) {
             delete records[word];
+            if (r.token != address(0x0)) {
+                SetUnlock(r.owner, false);
+            }
             return;
         }
         r.grabbed.push(msg.sender);
     }
+}
+
+contract TronToken {
+    string public name = "Tronix"; //  token name
+    string public symbol = "TRX"; //  token symbol
+    uint256 public decimals = 6; //  token digit
+
+    uint256 public nonce;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    uint256 public totalSupply = 0;
+    bool public stopped = false;
+
+    uint256 public constant valueFounder = 100000000000000000;
+    address payable public owner = address(0x0);
+
+    modifier isOwner {
+        assert(owner == msg.sender);
+        _;
+    }
+
+    modifier isRunning {
+        assert(!stopped);
+        _;
+    }
+
+    modifier validAddress {
+        assert(address(0x0) != msg.sender);
+        _;
+    }
+
+    function test() public returns (address) {
+        nonce++;
+        return msg.sender;
+    }
+
+    constructor() public {
+        owner = msg.sender;
+        totalSupply = valueFounder;
+        balanceOf[owner] = valueFounder;
+        emit Transfer(address(0x0), owner, valueFounder);
+    }
+
+    function transfer(address _to, uint256 _value)
+        public
+        isRunning
+        validAddress
+        returns (bool success)
+    {
+        emit Transfer(msg.sender, _to, _value);
+        require(balanceOf[msg.sender] >= _value);
+        require(balanceOf[_to] + _value >= balanceOf[_to]);
+        balanceOf[msg.sender] -= _value;
+        balanceOf[_to] += _value;
+        return true;
+    }
+
+    function transferFrom(address _from, address _to, uint256 _value)
+        public
+        isRunning
+        validAddress
+        returns (bool success)
+    {
+        require(balanceOf[_from] >= _value);
+        require(balanceOf[_to] + _value >= balanceOf[_to]);
+        require(allowance[_from][msg.sender] >= _value);
+        balanceOf[_to] += _value;
+        balanceOf[_from] -= _value;
+        allowance[_from][msg.sender] -= _value;
+        emit Transfer(_from, _to, _value);
+        return true;
+    }
+
+    function approve(address _spender, uint256 _value)
+        public
+        isRunning
+        validAddress
+        returns (bool success)
+    {
+        require(_value == 0 || allowance[msg.sender][_spender] == 0);
+        allowance[msg.sender][_spender] = _value;
+        emit Approval(msg.sender, _spender, _value);
+        return true;
+    }
+
+    function stop() public isOwner {
+        stopped = true;
+    }
+
+    function start() public isOwner {
+        stopped = false;
+    }
+
+    function setName(string memory _name) public isOwner {
+        name = _name;
+    }
+
+    function burn(uint256 _value) public {
+        require(balanceOf[msg.sender] >= _value);
+        balanceOf[msg.sender] -= _value;
+        balanceOf[address(0x0)] += _value;
+        emit Transfer(msg.sender, address(0x0), _value);
+    }
+
+    event Transfer(address indexed _from, address indexed _to, uint256 _value);
+    event Approval(
+        address indexed _owner,
+        address indexed _spender,
+        uint256 _value
+    );
 }
