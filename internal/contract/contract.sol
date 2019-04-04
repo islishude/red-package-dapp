@@ -274,7 +274,7 @@ contract RedPackage is Friendship, Token {
             value = r.remainAmount;
         } else {
             bytes memory entropy = abi.encode(
-                blockhash(block.number - 1),
+                // remove `blockhash(block.number-1) because of reporting error with js vm
                 msg.sender,
                 r.remainAmount,
                 r.remainSize,

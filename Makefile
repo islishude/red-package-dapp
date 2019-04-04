@@ -1,6 +1,5 @@
 build:
 	solc --overwrite --abi --bin --optimize -o internal/contract/build internal/contract/contract.sol
-abigen:
 	abigen -abi internal/contract/build/RedPackage.abi --bin internal/contract/build/RedPackage.bin --pkg redpkg --out internal/contract/redpkg.go
 lint:
 	prettier --write internal/contract/contract.sol
