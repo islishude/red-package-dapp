@@ -1,135 +1,7 @@
 pragma solidity ^0.5.0;
 
-contract Friendship {
-    mapping(address => address[]) internal friends;
-    mapping(address => mapping(address => bool)) public friendship;
-
-    constructor() public {}
-
-    function MyFriends() public view returns (address[] memory) {
-        return friends[msg.sender];
-    }
-
-    function AddFriend(address _friend) public {
-        if (friendship[msg.sender][_friend]) {
-            return;
-        }
-        friends[msg.sender].push(_friend);
-    }
-
-    function AddFriendList(address[] memory list) public {
-        for (uint i = 0; i < list.length; ++i) {
-            address cur = list[i];
-            if (friendship[msg.sender][cur]) {
-                continue;
-            }
-            friends[msg.sender].push(cur);
-            friendship[msg.sender][cur] = true;
-        }
-    }
-
-    function DelFriend(address _friend) public {
-        if (!friendship[msg.sender][_friend]) {
-            return;
-        }
-        delete friendship[msg.sender][_friend];
-        for (uint i = 0; i < friends[msg.sender].length; ++i) {
-            if (_friend != friends[msg.sender][i]) {
-                continue;
-            }
-            if (i == friends[msg.sender].length) {
-                friends[msg.sender].length--;
-                return;
-            }
-            friends[msg.sender][i] = friends[msg.sender][friends[msg.sender].length - 1];
-            friends[msg.sender].length--;
-        }
-    }
-}
-
-contract ERC20Interface {
-    function totalSupply() public view returns (uint);
-    function balanceOf(address tokenOwner) public view returns (uint balance);
-    function allowance(address tokenOwner, address spender)
-        public
-        view
-        returns (uint remaining);
-    function transfer(address to, uint tokens) public returns (bool success);
-    function approve(address spender, uint tokens)
-        public
-        returns (bool success);
-    function transferFrom(address from, address to, uint tokens)
-        public
-        returns (bool success);
-
-    event Transfer(address indexed from, address indexed to, uint tokens);
-    event Approval(
-        address indexed tokenOwner,
-        address indexed spender,
-        uint tokens
-    );
-}
-
-// DON'T implements ERC20Interface!
-contract TokenReciever {
-    bool public locked = false;
-    address owner;
-
-    constructor() public {
-        owner = msg.sender;
-    }
-
-    modifier IsLocked {
-        require(!locked);
-        _;
-    }
-
-    function transfer(address token, address to, uint value) public IsLocked {
-        ERC20Interface(token).transfer(to, value);
-    }
-
-    function transferFrom(address token, address from, address to, uint tokens)
-        public
-        IsLocked
-    {
-        require(!locked);
-        ERC20Interface(token).transferFrom(from, to, tokens);
-    }
-
-    function balanceOf(address token) public view returns (uint256) {
-        return ERC20Interface(token).balanceOf(address(this));
-    }
-
-    function SetUnlock(bool _locked) public {
-        require(msg.sender == owner);
-        locked = _locked;
-    }
-}
-
-contract Token {
-    mapping(address => TokenReciever) public tokens;
-
-    function NewTokenReceiver() public {
-        require(
-            address(tokens[msg.sender]) == address(0x0),
-            "Has been created receiver address"
-        );
-        TokenReciever token = new TokenReciever();
-        tokens[msg.sender] = token;
-    }
-
-    function WithdrawToken(address token, address _to, uint256 value) public {
-        tokens[msg.sender].transfer(token, _to, value);
-    }
-
-    function Balance(address token) public view returns (uint256) {
-        return tokens[msg.sender].balanceOf(token);
-    }
-
-    function SetUnlock(address user, bool locked) internal {
-        tokens[user].SetUnlock(locked);
-    }
-}
+import "./friendship.sol";
+import "./tokens.sol";
 
 contract RedPackage is Friendship, Token {
     struct Record {
@@ -143,42 +15,54 @@ contract RedPackage is Friendship, Token {
         uint256 remainSize;
         uint256 timestamp;
         uint256 expired;
-        address[] grabbed;
+        uint256 id;
     }
 
-    mapping(string => Record) records;
+    event Send(
+        address indexed sender,
+        address indexed token,
+        uint256 indexed value
+    );
+    event Receive(
+        address indexed receiver,
+        address indexed token,
+        uint256 indexed value
+    );
+
+    mapping(bytes32 => Record) records;
+    mapping(uint256 => mapping(address => bool)) grabbed;
+    uint256 internal nonce = 0;
 
     constructor() public {}
 
-    function getRecord(string memory word)
+    function getRecord(bytes32 word)
         public
         view
         returns (
-        address,
-        bool,
-        bool,
-        address,
-        uint256,
-        uint256,
-        uint256,
-        uint256,
-        uint256,
-        uint256,
-        address[] memory
+        address owner,
+        bool equalDivision,
+        bool onlyFriend,
+        address token,
+        uint256 amount,
+        uint256 remainAmount,
+        uint256 size,
+        uint256 remainSize,
+        uint256 timestamp,
+        uint256 expired
     )
     {
         Record memory r = records[word];
-        return (r.owner, r.equalDivision, r.onlyFriend, r.token, r.amount, r.remainAmount, r.size, r.remainSize, r.timestamp, r.expired, r.grabbed);
+        return (r.owner, r.equalDivision, r.onlyFriend, r.token, r.amount, r.remainAmount, r.size, r.remainSize, r.timestamp, r.expired);
     }
 
-    function IsWordExists(string memory word) public view returns (bool) {
+    function IsWordExists(bytes32 word) public view returns (bool) {
         Record memory r = records[word];
         return r.owner != address(0x0);
     }
 
     // Giving gives out ETH.
     function Giving(
-        string memory word,
+        bytes32 word,
         bool equalDivision,
         bool onlyFriend,
         uint256 size,
@@ -197,7 +81,6 @@ contract RedPackage is Friendship, Token {
             );
         }
 
-        address[] memory grabbed;
         records[word] = Record(
             msg.sender,
             equalDivision,
@@ -209,12 +92,14 @@ contract RedPackage is Friendship, Token {
             size,
             block.timestamp,
             block.timestamp + expireDays * 1 days,
-            grabbed
+            nonce
         );
+        nonce++;
+        emit Send(msg.sender, address(0x0), msg.value);
     }
 
     function Giving(
-        string memory word,
+        bytes32 word,
         address token,
         uint256 value,
         bool equalDivision,
@@ -222,7 +107,7 @@ contract RedPackage is Friendship, Token {
         uint256 size,
         uint256 expireDays
     ) public {
-        uint256 balance = tokens[msg.sender].balanceOf(token);
+        uint256 balance = TokenReciever(tokens[msg.sender]).balanceOf(token);
         require(balance >= value, "not sufficient funds");
         require(
             size > 0 && value > 0 && value > size && expireDays > 0,
@@ -237,7 +122,6 @@ contract RedPackage is Friendship, Token {
             );
         }
 
-        address[] memory grabbed;
         records[word] = Record(
             msg.sender,
             equalDivision,
@@ -249,12 +133,40 @@ contract RedPackage is Friendship, Token {
             size,
             block.timestamp,
             block.timestamp + expireDays * 1 days,
-            grabbed
+            nonce
         );
+        nonce++;
         SetUnlock(msg.sender, true);
+        emit Send(msg.sender, token, value);
     }
 
-    function Grabbing(string memory word) public {
+    function Revoke(bytes32 word) public {
+        Record storage r = records[word];
+        require(
+            r.owner == msg.sender,
+            "Red package not exists or you're not the owner"
+        );
+        require(r.expired < block.timestamp, "Only revoke expired one");
+        if (r.token == address(0x0)) {
+            msg.sender.transfer(r.amount);
+        } else {
+            SetUnlock(msg.sender, false);
+        }
+        delete records[word];
+    }
+
+    function CanGrab(bytes32 word) public view returns (bool has) {
+        Record storage r = records[word];
+        require(r.owner != address(0x0), "Red package not exists");
+        require(r.expired >= block.timestamp, "Red package expired");
+
+        if (r.onlyFriend) {
+            require(friendship[r.owner][msg.sender], "Only friend can grab");
+        }
+        return !grabbed[r.id][msg.sender];
+    }
+
+    function Grabbing(bytes32 word) public {
         Record storage r = records[word];
         require(r.owner != address(0x0), "Red package not exists");
         require(r.expired >= block.timestamp, "Red package expired");
@@ -263,9 +175,7 @@ contract RedPackage is Friendship, Token {
             require(friendship[r.owner][msg.sender], "Only friend can grab");
         }
 
-        for (uint256 i = 0; i < r.grabbed.length; ++i) {
-            require(msg.sender != r.grabbed[i], "can't grabbed twice");
-        }
+        require(!grabbed[r.id][msg.sender], "can't grabbed twice");
 
         uint256 value = 0;
         if (r.equalDivision) {
@@ -274,7 +184,6 @@ contract RedPackage is Friendship, Token {
             value = r.remainAmount;
         } else {
             bytes memory entropy = abi.encode(
-                // remove `blockhash(block.number-1) because of reporting error with js vm
                 msg.sender,
                 r.remainAmount,
                 r.remainSize,
@@ -291,11 +200,10 @@ contract RedPackage is Friendship, Token {
             }
         }
 
-        // owner of giving ETH can grab but owner of giving ERC20 token can't grab
         if (r.token == address(0x0)) {
             msg.sender.transfer(value);
-        } else {
-            tokens[r.owner].transfer(r.token, msg.sender, value);
+        } else if (r.owner != msg.sender) {
+            SendToken(r.token, r.owner, msg.sender, value);
         }
 
         r.remainAmount -= value;
@@ -305,67 +213,9 @@ contract RedPackage is Friendship, Token {
             if (r.token != address(0x0)) {
                 SetUnlock(r.owner, false);
             }
-            return;
+        } else {
+            grabbed[r.id][msg.sender] = true;
         }
-        r.grabbed.push(msg.sender);
+        emit Receive(msg.sender, r.token, value);
     }
-}
-
-// Simple ERC20 token for testing
-contract AdeToken {
-    string public name = "AdeToken";
-    string public symbol = "ADT";
-    uint8 public decimals = 18;
-    uint256 public constant totalSupply = 10 ** 18 * 10 ** 8;
-
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    constructor() public {
-        balanceOf[msg.sender] = totalSupply;
-        emit Transfer(address(0x0), msg.sender, totalSupply);
-    }
-
-    function transfer(address _to, uint256 _value)
-        public
-        returns (bool success)
-    {
-        require(balanceOf[msg.sender] >= _value);
-        require(balanceOf[_to] + _value >= balanceOf[_to]);
-        balanceOf[msg.sender] -= _value;
-        balanceOf[_to] += _value;
-        emit Transfer(msg.sender, _to, _value);
-        return true;
-    }
-
-    function transferFrom(address _from, address _to, uint256 _value)
-        public
-        returns (bool success)
-    {
-        require(balanceOf[_from] >= _value);
-        require(balanceOf[_to] + _value >= balanceOf[_to]);
-        require(allowance[_from][msg.sender] >= _value);
-        balanceOf[_to] += _value;
-        balanceOf[_from] -= _value;
-        allowance[_from][msg.sender] -= _value;
-        emit Transfer(_from, _to, _value);
-        return true;
-    }
-
-    function approve(address _spender, uint256 _value)
-        public
-        returns (bool success)
-    {
-        require(_value == 0 || allowance[msg.sender][_spender] == 0);
-        allowance[msg.sender][_spender] = _value;
-        emit Approval(msg.sender, _spender, _value);
-        return true;
-    }
-
-    event Transfer(address indexed _from, address indexed _to, uint256 _value);
-    event Approval(
-        address indexed _owner,
-        address indexed _spender,
-        uint256 _value
-    );
 }

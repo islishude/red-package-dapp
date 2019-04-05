@@ -1,8 +1,8 @@
-build:
+build: lint
 	solc --overwrite --abi --bin --optimize -o internal/contract/build internal/contract/contract.sol
-	abigen -abi internal/contract/build/RedPackage.abi --bin internal/contract/build/RedPackage.bin --pkg redpkg --out internal/contract/redpkg.go
+	abigen -abi internal/contract/build/RedPackage.abi --bin internal/contract/build/RedPackage.bin --pkg contract --out internal/contract/redpkg.go
 lint:
-	prettier --write internal/contract/contract.sol
+	prettier --write internal/contract/*.sol
 clean:
 	rm -rf internal/contract/build
 	rm internal/contract/redpkg.go
