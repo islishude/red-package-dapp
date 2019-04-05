@@ -136,7 +136,7 @@ contract RedPackage is Friendship, Token {
             nonce
         );
         nonce++;
-        SetUnlock(msg.sender, true);
+        SetLock(msg.sender, true);
         emit Send(msg.sender, token, value);
     }
 
@@ -150,7 +150,7 @@ contract RedPackage is Friendship, Token {
         if (r.token == address(0x0)) {
             msg.sender.transfer(r.amount);
         } else {
-            SetUnlock(msg.sender, false);
+            SetLock(msg.sender, false);
         }
         delete records[word];
     }
@@ -211,7 +211,7 @@ contract RedPackage is Friendship, Token {
         if (r.remainSize == 0) {
             delete records[word];
             if (r.token != address(0x0)) {
-                SetUnlock(r.owner, false);
+                SetLock(r.owner, false);
             }
         } else {
             grabbed[r.id][msg.sender] = true;

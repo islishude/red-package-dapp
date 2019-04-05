@@ -77,7 +77,7 @@ contract Token {
         return TokenReciever(tokens[msg.sender]).balanceOf(token);
     }
 
-    function SetUnlock(address user, bool locked) internal {
+    function SetLock(address user, bool locked) internal {
         TokenReciever tr = TokenReciever(tokens[user]);
         return locked ? tr.Lock() : tr.Unlock();
     }
