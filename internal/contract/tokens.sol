@@ -10,7 +10,7 @@ contract TokenReciever {
         owner = msg.sender;
     }
 
-    modifier IsLocked {
+    modifier OnlyUnlock {
         require(!locked);
         _;
     }
@@ -23,7 +23,7 @@ contract TokenReciever {
     function Send(address token, address to, uint value)
         public
         OnlyOwner
-        IsLocked
+        OnlyUnlock
     {
         ERC20Interface(token).transfer(to, value);
     }
@@ -31,7 +31,7 @@ contract TokenReciever {
     function SendFrom(address token, address from, address to, uint tokens)
         public
         OnlyOwner
-        IsLocked
+        OnlyUnlock
     {
         ERC20Interface(token).transferFrom(from, to, tokens);
     }
