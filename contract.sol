@@ -1,7 +1,7 @@
 pragma solidity ^0.5.0;
 
 import "./friendship.sol";
-import "./tokens.sol";
+import "./token_receiver.sol";
 
 contract RedPackage is Friendship, Token {
     struct Record {
@@ -51,14 +51,19 @@ contract RedPackage is Friendship, Token {
         uint256 expired
     )
     {
-        Record memory r = records[word];
+        bytes32 newWord = keccak256(abi.encode(word));
+        Record memory r = records[newWord];
         return (r.owner, r.equalDivision, r.onlyFriend, r.token, r.amount, r.remainAmount, r.size, r.remainSize, r.timestamp, r.expired);
     }
 
-    function IsWordExists(bytes32 word) public view returns (bool) {
-        Record memory r = records[word];
+    function IsWordExists(bytes32 newWord) internal view returns (bool) {
+        Record memory r = records[newWord];
         return r.owner != address(0x0);
     }
+
+    // Noitce for app implements
+    // If word length is more than 32bytes
+    // you can keccak256(word) at first
 
     // Giving gives out ETH.
     function Giving(
@@ -72,7 +77,9 @@ contract RedPackage is Friendship, Token {
             size > 0 && msg.value > 0 && msg.value > size && expireDays > 0,
             "invalid data provided"
         );
-        require(!IsWordExists(word), "Red package exists");
+
+        bytes32 newWord = keccak256(abi.encode(word));
+        require(!IsWordExists(newWord), "Red package exists");
 
         if (equalDivision) {
             require(
@@ -81,7 +88,7 @@ contract RedPackage is Friendship, Token {
             );
         }
 
-        records[word] = Record(
+        records[newWord] = Record(
             msg.sender,
             equalDivision,
             onlyFriend,
@@ -113,7 +120,8 @@ contract RedPackage is Friendship, Token {
             size > 0 && value > 0 && value > size && expireDays > 0,
             "invalid data provided"
         );
-        require(!IsWordExists(word), "Red package exists");
+        bytes32 newWord = keccak256(abi.encode(word));
+        require(!IsWordExists(newWord), "Red package exists");
 
         if (equalDivision) {
             require(
@@ -122,7 +130,7 @@ contract RedPackage is Friendship, Token {
             );
         }
 
-        records[word] = Record(
+        records[newWord] = Record(
             msg.sender,
             equalDivision,
             onlyFriend,
@@ -141,7 +149,8 @@ contract RedPackage is Friendship, Token {
     }
 
     function Revoke(bytes32 word) public {
-        Record storage r = records[word];
+        bytes32 newWord = keccak256(abi.encode(word));
+        Record storage r = records[newWord];
         require(
             r.owner == msg.sender,
             "Red package not exists or you're not the owner"
@@ -152,11 +161,12 @@ contract RedPackage is Friendship, Token {
         } else {
             SetLock(msg.sender, false);
         }
-        delete records[word];
+        delete records[newWord];
     }
 
     function CanGrab(bytes32 word) public view returns (bool has) {
-        Record storage r = records[word];
+        bytes32 newWord = keccak256(abi.encode(word));
+        Record storage r = records[newWord];
         require(r.owner != address(0x0), "Red package not exists");
         require(r.expired >= block.timestamp, "Red package expired");
 
@@ -167,7 +177,8 @@ contract RedPackage is Friendship, Token {
     }
 
     function Grabbing(bytes32 word) public {
-        Record storage r = records[word];
+        bytes32 newWord = keccak256(abi.encode(word));
+        Record storage r = records[newWord];
         require(r.owner != address(0x0), "Red package not exists");
         require(r.expired >= block.timestamp, "Red package expired");
 
@@ -209,7 +220,7 @@ contract RedPackage is Friendship, Token {
         r.remainAmount -= value;
         r.remainSize--;
         if (r.remainSize == 0) {
-            delete records[word];
+            delete records[newWord];
             if (r.token != address(0x0)) {
                 SetLock(r.owner, false);
             }
